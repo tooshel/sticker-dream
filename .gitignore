@@ -1,6 +1,7 @@
 .env
 node_modules
 output
+generated-stickers
 .DS_Store
 .vscode
 .env.local

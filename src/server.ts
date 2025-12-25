@@ -3,9 +3,15 @@ import { serve } from '@hono/node-server';
 import { cors } from 'hono/cors';
 import { GoogleGenAI } from "@google/genai";
 import { printToUSB, watchAndResumePrinters } from './print.ts';
+import { writeFile, mkdir } from 'fs/promises';
+import { join } from 'path';
 
 const app = new Hono();
 const PORT = 3000;
+const SAVE_DIR = './generated-stickers';
+
+// Ensure save directory exists
+await mkdir(SAVE_DIR, { recursive: true });
 
 // Enable CORS for Vite dev server
 app.use('/*', cors());
@@ -60,6 +66,35 @@ async function generateImage(prompt: string): Promise<Buffer | null> {
 }
 
 /**
+ * Save image and metadata to disk
+ */
+async function saveImageWithPrompt(buffer: Buffer, prompt: string): Promise<string> {
+  const timestamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+/, '');
+  const sanitizedPrompt = prompt
+    .substring(0, 50)
+    .replace(/[^a-z0-9]+/gi, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase();
+
+  const filename = `${timestamp}_${sanitizedPrompt}`;
+  const imagePath = join(SAVE_DIR, `${filename}.png`);
+  const metadataPath = join(SAVE_DIR, `${filename}.json`);
+
+  // Save image
+  await writeFile(imagePath, buffer);
+
+  // Save metadata
+  await writeFile(metadataPath, JSON.stringify({
+    prompt,
+    timestamp: new Date().toISOString(),
+    filename: `${filename}.png`
+  }, null, 2));
+
+  console.log(`💾 Saved: ${filename}.png`);
+  return imagePath;
+}
+
+/**
  * API endpoint to generate and print image
  */
 app.post('/api/generate', async (c) => {
@@ -76,6 +111,9 @@ app.post('/api/generate', async (c) => {
     if (!buffer) {
       return c.json({ error: 'Failed to generate image' }, 500);
     }
+
+    // Save the image and prompt
+    await saveImageWithPrompt(buffer, prompt);
 
     // Print the image
     try {

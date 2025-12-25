@@ -87,10 +87,8 @@ async function resetRecorder() {
       return;
     }
 
-    recordBtn.textContent = "Sending to Printer...";
-    await wait(3000);
-    recordBtn.textContent = "Printing...";
-    await wait(1500);
+    // Generate and print the image
+    await generateAndPrint(text);
 
     // Stop loading state
     recordBtn.classList.remove("loading");
