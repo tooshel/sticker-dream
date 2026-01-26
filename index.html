@@ -26,12 +26,109 @@
     <link rel="stylesheet" href="./src/style.css" />
   </head>
   <body>
+    <button class="settings-btn" aria-label="Settings">
+      <svg width="40" height="40" viewBox="0 0 8 8" xmlns="http://www.w3.org/2000/svg">
+        <rect x="3" y="0" width="2" height="1" fill="currentColor"/>
+        <rect x="2" y="1" width="1" height="1" fill="currentColor"/>
+        <rect x="5" y="1" width="1" height="1" fill="currentColor"/>
+        <rect x="1" y="2" width="1" height="1" fill="currentColor"/>
+        <rect x="6" y="2" width="1" height="1" fill="currentColor"/>
+        <rect x="0" y="3" width="1" height="2" fill="currentColor"/>
+        <rect x="7" y="3" width="1" height="2" fill="currentColor"/>
+        <rect x="1" y="5" width="1" height="1" fill="currentColor"/>
+        <rect x="6" y="5" width="1" height="1" fill="currentColor"/>
+        <rect x="2" y="6" width="1" height="1" fill="currentColor"/>
+        <rect x="5" y="6" width="1" height="1" fill="currentColor"/>
+        <rect x="3" y="7" width="2" height="1" fill="currentColor"/>
+        <rect x="3" y="3" width="2" height="2" fill="currentColor"/>
+      </svg>
+    </button>
     <div class="container">
       <button class="record" style="display: none">Sticker Dream</button>
       <audio id="audio"></audio>
       <p class="transcript">Checking microphone access...</p>
-      <img class="image-display" style="display: none" />
+      <div class="images-container" style="display: none"></div>
     </div>
     <div class="toast-container"></div>
+
+    <!-- Settings Modal -->
+    <div class="settings-modal" style="display: none">
+      <div class="settings-content">
+        <div class="settings-header">
+          <h2>Settings</h2>
+          <button class="close-btn" aria-label="Close">×</button>
+        </div>
+
+        <div class="settings-body">
+          <!-- Model Selection -->
+          <div class="setting-group">
+            <label for="model-select">Image Model:</label>
+            <select id="model-select" class="setting-select">
+              <option value="gemini">Google Gemini Imagen-4</option>
+              <option value="flux">FLUX.1 Pro</option>
+              <option value="all">All Models</option>
+            </select>
+          </div>
+
+          <!-- Auto-Print Setting -->
+          <div class="setting-group">
+            <label>
+              <input type="checkbox" id="auto-print" checked />
+              Auto-Print Images
+            </label>
+            <small class="setting-description">Uncheck to manually select which images to print</small>
+          </div>
+
+          <!-- For Kids Setting -->
+          <div class="setting-group">
+            <label>
+              <input type="checkbox" id="for-kids" checked />
+              Kid-Friendly Mode
+            </label>
+            <small class="setting-description">Adds "kids" to prompts for more child-appropriate content</small>
+          </div>
+
+          <!-- Line Style Setting -->
+          <div class="setting-group">
+            <label for="line-style">Line Style:</label>
+            <select id="line-style" class="setting-select">
+              <option value="default">Default</option>
+              <option value="sharpie">Sharpie - Bold Lines</option>
+              <option value="stencil">Stencil - Clean Edges</option>
+              <option value="coloring-book">Coloring Book - Simple Lines</option>
+            </select>
+            <small class="setting-description">Adjusts prompt style for cleaner low-res printing</small>
+          </div>
+
+          <!-- FLUX Settings -->
+          <div class="flux-settings" style="display: none">
+            <div class="setting-group">
+              <label for="safety-tolerance">Safety Tolerance (1-6):</label>
+              <input
+                type="range"
+                id="safety-tolerance"
+                min="1"
+                max="6"
+                value="2"
+                class="setting-slider"
+              />
+              <span class="slider-value">2</span>
+              <small class="setting-description">1 = Strict, 6 = Uncensored</small>
+            </div>
+
+            <div class="setting-group">
+              <label>
+                <input type="checkbox" id="enable-safety" checked />
+                Enable Safety Checker
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-footer">
+          <button class="save-btn">Save Settings</button>
+        </div>
+      </div>
+    </div>
   </body>
 </html>
