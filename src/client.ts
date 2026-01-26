@@ -18,10 +18,28 @@ const audioElement = document.querySelector("#audio") as HTMLAudioElement;
 const imageDisplay = document.querySelector(
   ".image-display"
 ) as HTMLImageElement;
+const toastContainer = document.querySelector(".toast-container") as HTMLDivElement;
 
 let mediaRecorder: MediaRecorder | null = null;
 let audioChunks: Blob[] = [];
 let recordingTimeout: number | null = null;
+
+// Toast notification function
+function showToast(message: string, type: 'error' | 'success' | 'info' = 'error', duration = 5000) {
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = message;
+
+  toastContainer.appendChild(toast);
+
+  // Auto-remove after duration
+  setTimeout(() => {
+    toast.style.animation = 'toast-fade-out 0.3s ease-out';
+    setTimeout(() => {
+      toast.remove();
+    }, 300);
+  }, duration);
+}
 
 // Check for microphone access before showing the button
 async function checkMicrophoneAccess() {
@@ -176,6 +194,12 @@ async function generateAndPrint(prompt: string) {
     });
 
     if (!response.ok) {
+      // Try to parse error details from JSON response
+      const contentType = response.headers.get("content-type");
+      if (contentType?.includes("application/json")) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || `Server error: ${response.statusText}`);
+      }
       throw new Error(`Server error: ${response.statusText}`);
     }
 
@@ -190,10 +214,19 @@ async function generateAndPrint(prompt: string) {
     console.log("✅ Image generated and printed!");
   } catch (error) {
     console.error("Error:", error);
-    transcriptDiv.textContent = `${prompt}\n\nError: Failed to generate image`;
-    alert(
-      "Failed to generate image: " +
-        (error instanceof Error ? error.message : "Unknown error")
-    );
+    let errorMessage = error instanceof Error ? error.message : "Unknown error";
+
+    // Try to parse if it's a JSON error and extract the message
+    try {
+      const parsed = JSON.parse(errorMessage);
+      if (parsed.message) {
+        errorMessage = parsed.message;
+      }
+    } catch {
+      // Not JSON, use the message as-is
+    }
+
+    transcriptDiv.innerHTML = `${prompt}<br><br>❌<br>Error generating image`;
+    showToast(errorMessage, 'error', 7000);
   }
 }
