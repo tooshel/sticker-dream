@@ -32,37 +32,46 @@ const imageGen3 = "imagen-3.0-generate-002";
 const imageGen4Fast = "imagen-4.0-fast-generate-001";
 const imageGen4Ultra = "imagen-4.0-ultra-generate-001";
 
-async function generateImage(prompt: string): Promise<Buffer | null> {
+async function generateImage(prompt: string): Promise<Buffer> {
   console.log(`🎨 Generating image: "${prompt}"`);
   console.time('generation');
 
-  const response = await ai.models.generateImages({
-    model: imageGen4,
-    prompt: `A black and white kids coloring page.
-    <image-description>
-    ${prompt}
-    </image-description>
-    ${prompt}`,
-    config: {
-      numberOfImages: 1,
-      aspectRatio: "9:16"
-    },
-  });
+  try {
+    const response = await ai.models.generateImages({
+      model: imageGen4,
+      prompt: `A black and white kids coloring page.
+      <image-description>
+      ${prompt}
+      </image-description>
+      ${prompt}`,
+      config: {
+        numberOfImages: 1,
+        aspectRatio: "9:16"
+      },
+    });
 
-  console.timeEnd('generation');
+    console.timeEnd('generation');
 
-  if (!response.generatedImages || response.generatedImages.length === 0) {
-    console.error('No images generated');
-    return null;
+    if (!response.generatedImages || response.generatedImages.length === 0) {
+      const errorMsg = 'No images generated - the AI may have rejected the prompt due to safety filters';
+      console.error(errorMsg);
+      throw new Error(errorMsg);
+    }
+
+    const imgBytes = response.generatedImages[0].image?.imageBytes;
+    if (!imgBytes) {
+      const errorMsg = 'No image bytes returned from the AI';
+      console.error(errorMsg);
+      throw new Error(errorMsg);
+    }
+
+    return Buffer.from(imgBytes, "base64");
+  } catch (error) {
+    console.timeEnd('generation');
+    // Log the full error from the API
+    console.error('❌ API Error Details:', error);
+    throw error;
   }
-
-  const imgBytes = response.generatedImages[0].image?.imageBytes;
-  if (!imgBytes) {
-    console.error('No image bytes returned');
-    return null;
-  }
-
-  return Buffer.from(imgBytes, "base64");
 }
 
 /**
@@ -108,10 +117,6 @@ app.post('/api/generate', async (c) => {
     // Generate the image
     const buffer = await generateImage(prompt);
 
-    if (!buffer) {
-      return c.json({ error: 'Failed to generate image' }, 500);
-    }
-
     // Save the image and prompt
     await saveImageWithPrompt(buffer, prompt);
 
@@ -136,9 +141,42 @@ app.post('/api/generate', async (c) => {
     });
 
   } catch (error) {
-    console.error('Error:', error);
+    // Log the full error for debugging
+    console.error('❌ Full error object:', error);
+
+    let errorMessage = 'Unknown error';
+
+    if (error instanceof Error) {
+      errorMessage = error.message;
+
+      // Check if the error message itself is a JSON string and extract the message
+      try {
+        const parsed = JSON.parse(errorMessage);
+        if (parsed.message) {
+          errorMessage = parsed.message;
+        } else if (parsed.error?.message) {
+          errorMessage = parsed.error.message;
+        }
+      } catch {
+        // Not JSON, use error.message as-is
+      }
+    } else if (typeof error === 'object' && error !== null) {
+      // Handle Google API error objects
+      const apiError = error as any;
+      if (apiError.message) {
+        errorMessage = apiError.message;
+      } else if (apiError.error?.message) {
+        errorMessage = apiError.error.message;
+      } else {
+        // Stringify as last resort
+        errorMessage = JSON.stringify(error);
+      }
+    }
+
+    console.error('❌ Extracted error message:', errorMessage);
+
     return c.json({
-      error: error instanceof Error ? error.message : 'Unknown error'
+      error: errorMessage
     }, 500);
   }
 });
