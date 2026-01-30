@@ -124,7 +124,7 @@ async function checkMicrophoneAccess() {
 
     // Show the record button
     recordBtn.style.display = "block";
-    transcriptDiv.value = "Press the button and imagine a sticker!";
+    transcriptDiv.value = "Press and hold the button to describe your sticker idea!";
   } catch (error) {
     console.error("Microphone access denied:", error);
     transcriptDiv.value =
