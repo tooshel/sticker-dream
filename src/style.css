@@ -188,6 +188,7 @@ body {
   justify-content: center;
   width: 100%;
   max-width: 1000px;
+  padding-bottom: 150px;
 }
 
 button,
@@ -215,16 +216,19 @@ textarea {
   touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
-  position: relative;
   image-rendering: pixelated;
-  margin-bottom: 30px;
-  position: absolute;
+  position: fixed;
   bottom: 10px;
+  bottom: max(10px, env(safe-area-inset-bottom));
+  left: 50%;
+  transform: translateX(-50%);
   width: 90%;
+  max-width: 1000px;
+  z-index: 100;
 }
 
 .record:active {
-  transform: translate(4px, 4px);
+  transform: translateX(-50%) translate(4px, 4px);
   box-shadow: 4px 4px 0 var(--dark-text), 0 0 0 12px var(--pastel-yellow);
 }
 
@@ -242,21 +246,21 @@ textarea {
 /* Animations */
 @keyframes pulse {
   from {
-    transform: scale(1);
+    transform: translateX(-50%) scale(1);
   }
   to {
-    transform: scale(1.05);
+    transform: translateX(-50%) scale(1.05);
   }
 }
 
 @keyframes loading-pulse {
   0%,
   100% {
-    transform: scale(1);
+    transform: translateX(-50%) scale(1);
     opacity: 1;
   }
   50% {
-    transform: scale(1.02);
+    transform: translateX(-50%) scale(1.02);
     opacity: 0.9;
   }
 }
@@ -272,14 +276,55 @@ textarea {
   max-width: 800px;
   width: 100%;
   box-shadow: 6px 6px 0 var(--dark-text);
-  margin-bottom: 30px;
+  margin-bottom: 20px;
   text-align: center;
   word-wrap: break-word;
   color: var(--dark-text);
+  resize: vertical;
+  min-height: 120px;
+  font-family: "Pixelify Sans", sans-serif;
+}
+
+.transcript:focus {
+  outline: none;
+  border-color: var(--pastel-pink);
+  box-shadow: 6px 6px 0 var(--dark-text), 0 0 0 4px var(--pastel-pink);
 }
 
 .transcript:empty {
   display: none;
+}
+
+/* Generate Button */
+.generate-btn {
+  font-size: 28px;
+  padding: 20px 40px;
+  background: var(--pastel-blue);
+  color: var(--dark-text);
+  border: 6px solid var(--dark-text);
+  border-radius: 15px;
+  cursor: pointer;
+  font-weight: 700;
+  text-transform: uppercase;
+  box-shadow: 6px 6px 0 var(--dark-text);
+  transition: all 0.1s ease;
+  margin-bottom: 30px;
+  font-family: "Pixelify Sans", sans-serif;
+}
+
+.generate-btn:hover {
+  background: var(--pastel-yellow);
+}
+
+.generate-btn:active {
+  transform: translate(3px, 3px);
+  box-shadow: 3px 3px 0 var(--dark-text);
+}
+
+.generate-btn.loading {
+  background: var(--pastel-blue);
+  animation: loading-pulse 1s ease-in-out infinite;
+  pointer-events: none;
 }
 
 /* Audio Player */

@@ -13,7 +13,8 @@ const transcriber = await pipeline(
 
 // Get DOM elements
 const recordBtn = document.querySelector(".record") as HTMLButtonElement;
-const transcriptDiv = document.querySelector(".transcript") as HTMLDivElement;
+const transcriptDiv = document.querySelector(".transcript") as HTMLTextAreaElement;
+const generateBtn = document.querySelector(".generate-btn") as HTMLButtonElement;
 const audioElement = document.querySelector("#audio") as HTMLAudioElement;
 const imagesContainer = document.querySelector(".images-container") as HTMLDivElement;
 const toastContainer = document.querySelector(".toast-container") as HTMLDivElement;
@@ -123,10 +124,10 @@ async function checkMicrophoneAccess() {
 
     // Show the record button
     recordBtn.style.display = "block";
-    transcriptDiv.textContent = "Press the button and imagine a sticker!";
+    transcriptDiv.value = "Press and hold the button to describe your sticker idea!";
   } catch (error) {
     console.error("Microphone access denied:", error);
-    transcriptDiv.textContent =
+    transcriptDiv.value =
       "❌ Microphone access required. Please enable microphone permissions in your browser settings.";
     recordBtn.style.display = "none";
   }
@@ -158,22 +159,25 @@ async function resetRecorder() {
     audioElement.src = audioUrl;
 
     // Transcribe
-    transcriptDiv.textContent = "Transcribing...";
+    transcriptDiv.value = "Transcribing...";
+    generateBtn.style.display = "none";
     const output = await transcriber(audioUrl);
     const text = Array.isArray(output) ? output[0].text : output.text;
-    transcriptDiv.textContent = text;
+    transcriptDiv.value = text;
+    generateBtn.style.display = "block";
 
     console.log(output);
     recordBtn.textContent = "Dreaming Up...";
 
     const abortWords = ["BLANK", "NO IMAGE", "NO STICKER", "CANCEL", "ABORT", "START OVER"];
     if(!text || abortWords.some(word => text.toUpperCase().includes(word))) {
-      transcriptDiv.textContent = "No image generated.";
+      transcriptDiv.value = "No image generated.";
       recordBtn.classList.remove("loading");
       recordBtn.textContent = "Cancelled";
       setTimeout(() => {
         recordBtn.textContent = "Sticker Dream";
       }, 1000);
+      generateBtn.style.display = "none";
       resetRecorder();
       return;
     }
@@ -246,6 +250,26 @@ recordBtn.addEventListener("pointerleave", () => {
 // Prevent context menu on long press
 recordBtn.addEventListener("contextmenu", (e) => {
   e.preventDefault();
+});
+
+// Generate button handler
+generateBtn.addEventListener("click", async () => {
+  const prompt = transcriptDiv.value.trim();
+  if (prompt && prompt !== "Transcribing..." && prompt !== "No image generated.") {
+    // Show loading state on both buttons
+    generateBtn.classList.add("loading");
+    generateBtn.textContent = "Generating...";
+    recordBtn.classList.add("loading");
+    recordBtn.textContent = "Dreaming Up...";
+
+    await generateAndPrint(prompt);
+
+    // Reset button states
+    generateBtn.classList.remove("loading");
+    generateBtn.textContent = "Generate";
+    recordBtn.classList.remove("loading");
+    recordBtn.textContent = "Sticker Dream";
+  }
 });
 
 // Settings modal handlers
@@ -323,7 +347,8 @@ async function generateAndPrint(prompt: string) {
 
   try {
     const printText = currentSettings.autoPrint ? "Generating & Printing..." : "Generating...";
-    transcriptDiv.textContent = `${prompt}\n\n${printText}`;
+    transcriptDiv.value = `${prompt}\n\n${printText}`;
+    generateBtn.style.display = "none";
 
     const response = await fetch("/api/generate", {
       method: "POST",
@@ -408,7 +433,8 @@ async function generateAndPrint(prompt: string) {
       imagesContainer.appendChild(imageCard);
     });
 
-    transcriptDiv.textContent = prompt;
+    transcriptDiv.value = prompt;
+    generateBtn.style.display = "block";
     console.log("✅ Image(s) generated!");
   } catch (error) {
     console.error("Error:", error);
@@ -424,7 +450,8 @@ async function generateAndPrint(prompt: string) {
       // Not JSON, use the message as-is
     }
 
-    transcriptDiv.innerHTML = `${prompt}<br><br>❌<br>Error generating image`;
+    transcriptDiv.value = `${prompt}\n\n❌\nError generating image`;
+    generateBtn.style.display = "block";
     showToast(errorMessage, 'error', 7000);
   }
 }
