@@ -14,6 +14,8 @@ const transcriber = await pipeline(
 // Get DOM elements
 const recordBtn = document.querySelector(".record") as HTMLButtonElement;
 const transcriptDiv = document.querySelector(".transcript") as HTMLTextAreaElement;
+const statusMessage = document.querySelector(".status-message") as HTMLDivElement;
+const cancelBtn = document.querySelector(".cancel-btn") as HTMLButtonElement;
 const generateBtn = document.querySelector(".generate-btn") as HTMLButtonElement;
 const audioElement = document.querySelector("#audio") as HTMLAudioElement;
 const imagesContainer = document.querySelector(".images-container") as HTMLDivElement;
@@ -34,6 +36,7 @@ const fluxSettings = document.querySelector(".flux-settings") as HTMLDivElement;
 let mediaRecorder: MediaRecorder | null = null;
 let audioChunks: Blob[] = [];
 let recordingTimeout: number | null = null;
+let currentAbortController: AbortController | null = null;
 
 // Settings state
 interface AppSettings {
@@ -124,7 +127,8 @@ async function checkMicrophoneAccess() {
 
     // Show the record button
     recordBtn.style.display = "block";
-    transcriptDiv.value = "Press and hold the button to describe your sticker idea!";
+    transcriptDiv.value = "Press and hold the button to describe your sticker!\nOr type your idea here!";
+    generateBtn.style.display = "block";
   } catch (error) {
     console.error("Microphone access denied:", error);
     transcriptDiv.value =
@@ -159,11 +163,13 @@ async function resetRecorder() {
     audioElement.src = audioUrl;
 
     // Transcribe
-    transcriptDiv.value = "Transcribing...";
+    statusMessage.textContent = "Transcribing...";
+    statusMessage.style.display = "block";
     generateBtn.style.display = "none";
     const output = await transcriber(audioUrl);
     const text = Array.isArray(output) ? output[0].text : output.text;
     transcriptDiv.value = text;
+    statusMessage.style.display = "none";
     generateBtn.style.display = "block";
 
     console.log(output);
@@ -171,11 +177,13 @@ async function resetRecorder() {
 
     const abortWords = ["BLANK", "NO IMAGE", "NO STICKER", "CANCEL", "ABORT", "START OVER"];
     if(!text || abortWords.some(word => text.toUpperCase().includes(word))) {
-      transcriptDiv.value = "No image generated.";
+      statusMessage.textContent = "Cancelled";
+      statusMessage.style.display = "block";
       recordBtn.classList.remove("loading");
       recordBtn.textContent = "Cancelled";
       setTimeout(() => {
         recordBtn.textContent = "Sticker Dream";
+        statusMessage.style.display = "none";
       }, 1000);
       generateBtn.style.display = "none";
       resetRecorder();
@@ -195,6 +203,14 @@ async function resetRecorder() {
 
   };
 }
+
+// Clear default text on first focus
+const defaultText = "Press and hold the button to describe your sticker!\nOr type your idea here!";
+transcriptDiv.addEventListener("focus", () => {
+  if (transcriptDiv.value === defaultText) {
+    transcriptDiv.value = "";
+  }
+});
 
 // Check microphone access on load
 checkMicrophoneAccess();
@@ -250,6 +266,15 @@ recordBtn.addEventListener("pointerleave", () => {
 // Prevent context menu on long press
 recordBtn.addEventListener("contextmenu", (e) => {
   e.preventDefault();
+});
+
+// Cancel button handler
+cancelBtn.addEventListener("click", () => {
+  if (currentAbortController) {
+    currentAbortController.abort();
+    recordBtn.classList.remove("loading");
+    recordBtn.textContent = "Sticker Dream";
+  }
 });
 
 // Generate button handler
@@ -347,8 +372,13 @@ async function generateAndPrint(prompt: string) {
 
   try {
     const printText = currentSettings.autoPrint ? "Generating & Printing..." : "Generating...";
-    transcriptDiv.value = `${prompt}\n\n${printText}`;
+    statusMessage.textContent = printText;
+    statusMessage.style.display = "block";
     generateBtn.style.display = "none";
+    cancelBtn.style.display = "block";
+
+    // Create abort controller for this request
+    currentAbortController = new AbortController();
 
     const response = await fetch("/api/generate", {
       method: "POST",
@@ -364,6 +394,7 @@ async function generateAndPrint(prompt: string) {
         forKids: currentSettings.forKids,
         lineStyle: currentSettings.lineStyle
       }),
+      signal: currentAbortController.signal
     });
 
     if (!response.ok) {
@@ -433,11 +464,25 @@ async function generateAndPrint(prompt: string) {
       imagesContainer.appendChild(imageCard);
     });
 
-    transcriptDiv.value = prompt;
+    statusMessage.style.display = "none";
+    cancelBtn.style.display = "none";
     generateBtn.style.display = "block";
     console.log("✅ Image(s) generated!");
   } catch (error) {
     console.error("Error:", error);
+
+    // Check if it was aborted
+    if (error instanceof Error && error.name === 'AbortError') {
+      statusMessage.textContent = "Cancelled";
+      statusMessage.style.display = "block";
+      setTimeout(() => {
+        statusMessage.style.display = "none";
+      }, 2000);
+      cancelBtn.style.display = "none";
+      generateBtn.style.display = "block";
+      return;
+    }
+
     let errorMessage = error instanceof Error ? error.message : "Unknown error";
 
     // Try to parse if it's a JSON error and extract the message
@@ -450,8 +495,16 @@ async function generateAndPrint(prompt: string) {
       // Not JSON, use the message as-is
     }
 
-    transcriptDiv.value = `${prompt}\n\n❌\nError generating image`;
+    statusMessage.textContent = "❌ Error generating image";
+    statusMessage.style.display = "block";
+    cancelBtn.style.display = "none";
     generateBtn.style.display = "block";
     showToast(errorMessage, 'error', 7000);
+
+    setTimeout(() => {
+      statusMessage.style.display = "none";
+    }, 3000);
+  } finally {
+    currentAbortController = null;
   }
 }
