@@ -74,7 +74,7 @@ async function generateImageGemini(
       ${prompt}`,
       config: {
         numberOfImages: 1,
-        aspectRatio: "9:16",
+        aspectRatio: "3:4", // Closest to 4:6 for portrait stickers (Gemini doesn't support 2:3)
       },
     });
 
@@ -139,7 +139,7 @@ async function generateImageFlux(
     const output = (await replicate.run("black-forest-labs/flux-schnell", {
       input: {
         prompt: fullPrompt,
-        aspect_ratio: "9:16",
+        aspect_ratio: "2:3", // 4:6 ratio for portrait stickers
         output_format: "png",
         safety_tolerance: safetyTolerance,
         disable_safety_checker: !enableSafetyChecker,

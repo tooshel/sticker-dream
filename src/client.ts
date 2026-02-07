@@ -37,6 +37,7 @@ let mediaRecorder: MediaRecorder | null = null;
 let audioChunks: Blob[] = [];
 let recordingTimeout: number | null = null;
 let currentAbortController: AbortController | null = null;
+let isRecordingViaKeyboard = false;
 
 // Settings state
 interface AppSettings {
@@ -266,6 +267,66 @@ recordBtn.addEventListener("pointerleave", () => {
 // Prevent context menu on long press
 recordBtn.addEventListener("contextmenu", (e) => {
   e.preventDefault();
+});
+
+// Keyboard event handling for Ctrl+Enter (push-to-talk)
+document.addEventListener("keydown", async (e) => {
+  // Check for Ctrl+Enter (Cmd+Enter on Mac also works with ctrlKey)
+  if ((e.ctrlKey || e.metaKey) && e.key === "Enter" && !isRecordingViaKeyboard) {
+    e.preventDefault();
+
+    // Don't start recording if already recording or loading or no mediaRecorder
+    if (!mediaRecorder || mediaRecorder.state === "recording" || recordBtn.classList.contains("loading")) {
+      return;
+    }
+
+    isRecordingViaKeyboard = true;
+
+    // Reset audio chunks
+    audioChunks = [];
+    console.log(`Media recorder (keyboard)`, mediaRecorder);
+
+    // Start recording
+    mediaRecorder.start();
+    console.log(`Media recorder started (keyboard)`);
+    recordBtn.classList.add("recording");
+    recordBtn.textContent = "Listening...";
+
+    // Auto-stop after 15 seconds
+    recordingTimeout = window.setTimeout(() => {
+      if (mediaRecorder && mediaRecorder.state === "recording") {
+        mediaRecorder.stop();
+        mediaRecorder.stream.getTracks().forEach((track) => track.stop());
+        isRecordingViaKeyboard = false;
+      }
+    }, 15000);
+  }
+});
+
+document.addEventListener("keyup", (e) => {
+  // Stop recording when either Ctrl or Enter is released
+  if (isRecordingViaKeyboard && (e.key === "Control" || e.key === "Meta" || e.key === "Enter")) {
+    e.preventDefault();
+    console.log(`Media recorder keyup`);
+
+    if (recordingTimeout) {
+      clearTimeout(recordingTimeout);
+      recordingTimeout = null;
+    }
+
+    if (mediaRecorder) {
+      if (mediaRecorder.state === "recording") {
+        mediaRecorder.stop();
+        mediaRecorder.stream.getTracks().forEach((track) => track.stop());
+      } else {
+        // If we released too quickly and recorder hasn't started, just reset the button
+        recordBtn.classList.remove("recording");
+        recordBtn.textContent = "Sticker Dream";
+      }
+    }
+
+    isRecordingViaKeyboard = false;
+  }
 });
 
 // Cancel button handler
