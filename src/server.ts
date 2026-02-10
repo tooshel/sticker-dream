@@ -3,8 +3,9 @@ import { serve } from "@hono/node-server";
 import { cors } from "hono/cors";
 import { GoogleGenAI } from "@google/genai";
 import Replicate from "replicate";
+import OpenAI from "openai";
 import { printToUSB, watchAndResumePrinters } from "./print.ts";
-import { writeFile, mkdir, readFile } from "fs/promises";
+import { writeFile, mkdir, readFile, readdir } from "fs/promises";
 import { join } from "path";
 
 const app = new Hono();
@@ -27,6 +28,16 @@ const ai = new GoogleGenAI({
 // Initialize Replicate
 const replicate = new Replicate({
   auth: process.env["REPLICATE_API_TOKEN"],
+});
+
+// Initialize OpenRouter
+const openrouter = new OpenAI({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env["OPENROUTER_API_KEY"],
+  defaultHeaders: {
+    "HTTP-Referer": "http://localhost:3000",
+    "X-Title": "Sticker Dream",
+  },
 });
 
 /**
@@ -172,6 +183,71 @@ async function generateImageFlux(
 }
 
 /**
+ * Generate image using OpenRouter with specified model
+ */
+async function generateImageOpenRouter(
+  modelId: string,
+  modelDisplayName: string,
+  prompt: string,
+  forKids: boolean = true,
+  lineStyle: string = 'default'
+): Promise<Buffer> {
+  console.log(`🎨 Generating image with ${modelDisplayName}: "${prompt}"`);
+  console.time(`${modelDisplayName}-generation`);
+
+  const promptPrefix = forKids
+    ? "A black and white kids coloring page."
+    : "A black and white coloring page.";
+
+  const lineStyleModifiers: Record<string, string> = {
+    'default': '',
+    'sharpie': 'thick bold lines, sharpie marker drawing, vector art, monochrome, high contrast, no shading, no gray, 2D flat',
+    'stencil': 'black and white stencil art, woodcut style, rubber stamp style, clean edges, negative space',
+    'coloring-book': 'simple line art coloring page, low detail, minimalist, uncolored, outlines only'
+  };
+
+  const styleModifier = lineStyleModifiers[lineStyle] || '';
+  const fullPrompt = styleModifier
+    ? `${promptPrefix} ${styleModifier}. ${prompt}`
+    : `${promptPrefix} ${prompt}`;
+
+  try {
+    const response = await openrouter.images.generate({
+      model: modelId,
+      prompt: fullPrompt,
+      n: 1,
+      size: "1024x1536", // 2:3 aspect ratio for portrait stickers
+    });
+
+    console.timeEnd(`${modelDisplayName}-generation`);
+
+    if (!response.data || response.data.length === 0) {
+      throw new Error(`No image returned from ${modelDisplayName}`);
+    }
+
+    const imageData = response.data[0];
+
+    // Handle both URL and base64 responses
+    if (imageData.url) {
+      const fetchResponse = await fetch(imageData.url);
+      if (!fetchResponse.ok) {
+        throw new Error(`Failed to fetch image from URL: ${fetchResponse.statusText}`);
+      }
+      const arrayBuffer = await fetchResponse.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    } else if (imageData.b64_json) {
+      return Buffer.from(imageData.b64_json, 'base64');
+    } else {
+      throw new Error(`No image URL or base64 data returned from ${modelDisplayName}`);
+    }
+  } catch (error) {
+    console.timeEnd(`${modelDisplayName}-generation`);
+    console.error(`❌ ${modelDisplayName} API Error Details:`, error);
+    throw error;
+  }
+}
+
+/**
  * Save images and metadata to disk
  */
 async function saveImagesWithMetadata(
@@ -241,14 +317,14 @@ async function saveImagesWithMetadata(
  * API endpoint to generate and print image
  */
 app.post("/api/generate", async (c) => {
-  const { prompt, model, enableSafetyChecker, safetyTolerance, autoPrint, forKids, lineStyle } =
+  const { prompt, models, enableSafetyChecker, safetyTolerance, autoPrint, forKids, lineStyle } =
     await c.req.json();
 
   if (!prompt) {
     return c.json({ error: "Prompt is required" }, 400);
   }
 
-  const selectedModel = model || "gemini";
+  const selectedModels = models || ["gemini"]; // Default to gemini if no models specified
   const shouldAutoPrint = autoPrint !== false; // Default to true
   const isForKids = forKids !== false; // Default to true
   const selectedLineStyle = lineStyle || 'default';
@@ -257,49 +333,39 @@ app.post("/api/generate", async (c) => {
     const buffers: Buffer[] = [];
     const modelNames: string[] = [];
 
-    // Generate images based on selected model
-    if (selectedModel === "all") {
-      // Generate with both models
+    // Generate images for each selected model
+    for (const modelName of selectedModels) {
       try {
-        const geminiBuffer = await generateImageGemini(prompt, isForKids, selectedLineStyle);
-        buffers.push(geminiBuffer);
-        modelNames.push("gemini");
-      } catch (error) {
-        console.error("Gemini generation failed:", error);
-      }
+        let buffer: Buffer;
 
-      try {
-        const fluxBuffer = await generateImageFlux(
-          prompt,
-          enableSafetyChecker,
-          safetyTolerance,
-          isForKids,
-          selectedLineStyle
-        );
-        buffers.push(fluxBuffer);
-        modelNames.push("flux");
-      } catch (error) {
-        console.error("FLUX generation failed:", error);
-      }
+        switch (modelName) {
+          case 'gemini':
+            buffer = await generateImageGemini(prompt, isForKids, selectedLineStyle);
+            break;
+          case 'flux':
+            buffer = await generateImageFlux(prompt, enableSafetyChecker, safetyTolerance, isForKids, selectedLineStyle);
+            break;
+          case 'dalle3':
+            buffer = await generateImageOpenRouter('openai/dall-e-3', 'DALL-E 3', prompt, isForKids, selectedLineStyle);
+            break;
+          case 'sd3':
+            buffer = await generateImageOpenRouter('stabilityai/stable-diffusion-3-medium', 'SD3', prompt, isForKids, selectedLineStyle);
+            break;
+          default:
+            console.error(`Unknown model: ${modelName}`);
+            continue;
+        }
 
-      if (buffers.length === 0) {
-        throw new Error("All models failed to generate images");
+        buffers.push(buffer);
+        modelNames.push(modelName);
+      } catch (error) {
+        console.error(`${modelName} generation failed:`, error);
+        // Continue with other models even if one fails
       }
-    } else if (selectedModel === "flux") {
-      const buffer = await generateImageFlux(
-        prompt,
-        enableSafetyChecker,
-        safetyTolerance,
-        isForKids,
-        selectedLineStyle
-      );
-      buffers.push(buffer);
-      modelNames.push("flux");
-    } else {
-      // Default to gemini
-      const buffer = await generateImageGemini(prompt, isForKids, selectedLineStyle);
-      buffers.push(buffer);
-      modelNames.push("gemini");
+    }
+
+    if (buffers.length === 0) {
+      throw new Error("All models failed to generate images");
     }
 
     // Save all generated images with metadata
@@ -385,6 +451,76 @@ app.post("/api/generate", async (c) => {
       },
       500
     );
+  }
+});
+
+/**
+ * API endpoint to get random past sticker ideas for inspiration
+ */
+app.get("/api/inspiration", async (c) => {
+  try {
+    const count = parseInt(c.req.query("count") || "10", 10);
+
+    // Read all JSON files from the generated-stickers directory
+    const files = await readdir(SAVE_DIR);
+    const jsonFiles = files.filter((f) => f.endsWith(".json"));
+
+    if (jsonFiles.length === 0) {
+      return c.json({ ideas: [] });
+    }
+
+    // Randomly select some files
+    const selectedFiles = jsonFiles
+      .sort(() => Math.random() - 0.5)
+      .slice(0, Math.min(count, jsonFiles.length));
+
+    // Read the metadata and get the first image for each
+    const ideas = await Promise.all(
+      selectedFiles.map(async (file) => {
+        try {
+          const metadataPath = join(SAVE_DIR, file);
+          const metadata = JSON.parse(await readFile(metadataPath, "utf-8"));
+
+          // Get the first image (prefer gemini, fallback to any available)
+          let imageFilename: string | null = null;
+
+          if (metadata.images && metadata.images.length > 0) {
+            // New format with multiple images
+            const geminiImage = metadata.images.find((img: any) => img.model === "gemini");
+            imageFilename = geminiImage?.filename || metadata.images[0].filename;
+          } else if (metadata.filename) {
+            // Old format with single filename
+            imageFilename = metadata.filename;
+          }
+
+          if (!imageFilename) {
+            return null;
+          }
+
+          // Read the image and convert to base64
+          const imagePath = join(SAVE_DIR, imageFilename);
+          const imageBuffer = await readFile(imagePath);
+          const imageBase64 = imageBuffer.toString("base64");
+
+          return {
+            prompt: metadata.prompt.trim(),
+            image: imageBase64,
+            timestamp: metadata.timestamp,
+          };
+        } catch (error) {
+          console.warn(`Failed to read ${file}:`, error);
+          return null;
+        }
+      })
+    );
+
+    // Filter out any failed reads
+    const validIdeas = ideas.filter((idea) => idea !== null);
+
+    return c.json({ ideas: validIdeas });
+  } catch (error) {
+    console.error("❌ Error getting inspiration:", error);
+    return c.json({ error: "Failed to get inspiration", ideas: [] }, 500);
   }
 });
 
