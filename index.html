@@ -51,6 +51,12 @@
       <button class="cancel-btn" style="display: none">Cancel</button>
       <button class="generate-btn" style="display: none">Generate</button>
       <div class="images-container" style="display: none"></div>
+
+      <!-- Inspiration Gallery -->
+      <div class="inspiration-section" style="display: none">
+        <h3>Need ideas? Try these:</h3>
+        <div class="inspiration-gallery"></div>
+      </div>
     </div>
     <div class="toast-container"></div>
 
@@ -65,12 +71,26 @@
         <div class="settings-body">
           <!-- Model Selection -->
           <div class="setting-group">
-            <label for="model-select">Image Model:</label>
-            <select id="model-select" class="setting-select">
-              <option value="gemini">Google Gemini Imagen-4</option>
-              <option value="flux">FLUX.1 Pro</option>
-              <option value="all">All Models</option>
-            </select>
+            <label>Image Models (select one or more):</label>
+            <div class="model-checkboxes">
+              <label>
+                <input type="checkbox" class="model-checkbox" data-model="gemini" checked />
+                Gemini Imagen-4
+              </label>
+              <label>
+                <input type="checkbox" class="model-checkbox" data-model="flux" />
+                FLUX.1 Schnell
+              </label>
+              <label>
+                <input type="checkbox" class="model-checkbox" data-model="dalle3" />
+                DALL-E 3
+              </label>
+              <label>
+                <input type="checkbox" class="model-checkbox" data-model="sd3" />
+                Stable Diffusion 3
+              </label>
+            </div>
+            <small class="setting-description">Select which AI models to use for generation</small>
           </div>
 
           <!-- Auto-Print Setting -->
@@ -101,6 +121,30 @@
               <option value="coloring-book">Coloring Book - Simple Lines</option>
             </select>
             <small class="setting-description">Adjusts prompt style for cleaner low-res printing</small>
+          </div>
+
+          <!-- Inspiration Gallery Settings -->
+          <div class="setting-group">
+            <label>
+              <input type="checkbox" id="show-inspiration" checked />
+              Show Inspiration Gallery
+            </label>
+            <small class="setting-description">Display scrolling ideas for inspiration</small>
+          </div>
+
+          <div class="setting-group">
+            <label for="inspiration-speed">Scroll Speed:</label>
+            <input
+              type="range"
+              id="inspiration-speed"
+              min="20"
+              max="100"
+              step="10"
+              value="60"
+              class="setting-slider"
+            />
+            <span class="slider-value" id="speed-value">60s</span>
+            <small class="setting-description">How fast the inspiration gallery scrolls</small>
           </div>
 
           <!-- FLUX Settings -->

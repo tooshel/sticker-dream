@@ -24,7 +24,7 @@ const settingsBtn = document.querySelector(".settings-btn") as HTMLButtonElement
 const settingsModal = document.querySelector(".settings-modal") as HTMLDivElement;
 const closeBtn = document.querySelector(".close-btn") as HTMLButtonElement;
 const saveBtn = document.querySelector(".save-btn") as HTMLButtonElement;
-const modelSelect = document.querySelector("#model-select") as HTMLSelectElement;
+const modelCheckboxes = document.querySelectorAll(".model-checkbox") as NodeListOf<HTMLInputElement>;
 const safetyToleranceSlider = document.querySelector("#safety-tolerance") as HTMLInputElement;
 const safetyToleranceValue = document.querySelector(".slider-value") as HTMLSpanElement;
 const enableSafetyCheckbox = document.querySelector("#enable-safety") as HTMLInputElement;
@@ -32,6 +32,11 @@ const autoPrintCheckbox = document.querySelector("#auto-print") as HTMLInputElem
 const forKidsCheckbox = document.querySelector("#for-kids") as HTMLInputElement;
 const lineStyleSelect = document.querySelector("#line-style") as HTMLSelectElement;
 const fluxSettings = document.querySelector(".flux-settings") as HTMLDivElement;
+const showInspirationCheckbox = document.querySelector("#show-inspiration") as HTMLInputElement;
+const inspirationSpeedSlider = document.querySelector("#inspiration-speed") as HTMLInputElement;
+const speedValue = document.querySelector("#speed-value") as HTMLSpanElement;
+const inspirationSection = document.querySelector(".inspiration-section") as HTMLDivElement;
+const inspirationGallery = document.querySelector(".inspiration-gallery") as HTMLDivElement;
 
 let mediaRecorder: MediaRecorder | null = null;
 let audioChunks: Blob[] = [];
@@ -41,21 +46,25 @@ let isRecordingViaKeyboard = false;
 
 // Settings state
 interface AppSettings {
-  model: 'gemini' | 'flux' | 'all';
+  models: string[]; // Array of selected model names
   enableSafetyChecker: boolean;
   safetyTolerance: number;
   autoPrint: boolean;
   forKids: boolean;
   lineStyle: 'default' | 'sharpie' | 'stencil' | 'coloring-book';
+  showInspiration: boolean;
+  inspirationSpeed: number;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
-  model: 'gemini',
+  models: ['gemini'], // Default to just Gemini
   enableSafetyChecker: true,
   safetyTolerance: 2,
   autoPrint: true,
   forKids: true,
-  lineStyle: 'default'
+  lineStyle: 'default',
+  showInspiration: true,
+  inspirationSpeed: 60
 };
 
 let currentSettings: AppSettings = { ...DEFAULT_SETTINGS };
@@ -85,17 +94,28 @@ function saveSettings(settings: AppSettings): void {
 
 // Update UI from settings
 function updateSettingsUI(): void {
-  modelSelect.value = currentSettings.model;
+  // Update model checkboxes
+  modelCheckboxes.forEach(checkbox => {
+    const modelName = checkbox.getAttribute('data-model');
+    checkbox.checked = currentSettings.models.includes(modelName || '');
+  });
+
   safetyToleranceSlider.value = currentSettings.safetyTolerance.toString();
   safetyToleranceValue.textContent = currentSettings.safetyTolerance.toString();
   enableSafetyCheckbox.checked = currentSettings.enableSafetyChecker;
   autoPrintCheckbox.checked = currentSettings.autoPrint;
   forKidsCheckbox.checked = currentSettings.forKids;
   lineStyleSelect.value = currentSettings.lineStyle;
+  showInspirationCheckbox.checked = currentSettings.showInspiration;
+  inspirationSpeedSlider.value = currentSettings.inspirationSpeed.toString();
+  speedValue.textContent = `${currentSettings.inspirationSpeed}s`;
 
-  // Show/hide FLUX settings based on model
-  const showFluxSettings = currentSettings.model === 'flux' || currentSettings.model === 'all';
-  fluxSettings.style.display = showFluxSettings ? 'block' : 'none';
+  // Show/hide FLUX settings based on selected models
+  const hasFluxModel = currentSettings.models.includes('flux');
+  fluxSettings.style.display = hasFluxModel ? 'block' : 'none';
+
+  // Apply inspiration settings
+  applyInspirationSettings();
 }
 
 // Initialize settings
@@ -117,6 +137,102 @@ function showToast(message: string, type: 'error' | 'success' | 'info' = 'error'
       toast.remove();
     }, 300);
   }, duration);
+}
+
+// Apply inspiration settings (show/hide and speed)
+function applyInspirationSettings() {
+  // Show/hide inspiration section
+  if (!currentSettings.showInspiration) {
+    inspirationSection.style.display = "none";
+    return;
+  }
+
+  // Update animation speed
+  const scrollWrapper = document.querySelector(".inspiration-scroll-wrapper") as HTMLElement;
+  if (scrollWrapper) {
+    scrollWrapper.style.animationDuration = `${currentSettings.inspirationSpeed}s`;
+  }
+
+  // Only show if we have content
+  if (inspirationGallery.children.length > 0) {
+    inspirationSection.style.display = "block";
+  }
+}
+
+// Fetch and display inspiration ideas
+async function loadInspirationGallery() {
+  try {
+    const response = await fetch("http://localhost:3000/api/inspiration?count=50");
+    const data = await response.json();
+
+    if (!data.ideas || data.ideas.length === 0) {
+      // No ideas yet, hide the section
+      inspirationSection.style.display = "none";
+      return;
+    }
+
+    // Clear existing content
+    inspirationGallery.innerHTML = "";
+
+    // Create an inner wrapper for the scrolling items
+    const scrollWrapper = document.createElement("div");
+    scrollWrapper.className = "inspiration-scroll-wrapper";
+
+    // Function to create an item element
+    const createItem = (idea: { prompt: string; image: string; timestamp: string }) => {
+      const item = document.createElement("div");
+      item.className = "inspiration-item";
+
+      const img = document.createElement("img");
+      img.src = `data:image/png;base64,${idea.image}`;
+      img.alt = idea.prompt;
+
+      const prompt = document.createElement("p");
+      prompt.textContent = idea.prompt;
+
+      item.appendChild(img);
+      item.appendChild(prompt);
+
+      // Click to use this idea
+      item.addEventListener("click", () => {
+        transcriptDiv.value = idea.prompt;
+        // Scroll to the textarea
+        transcriptDiv.scrollIntoView({ behavior: "smooth", block: "center" });
+        // Flash the textarea to show it was updated
+        transcriptDiv.classList.add("flash");
+        setTimeout(() => transcriptDiv.classList.remove("flash"), 500);
+      });
+
+      return item;
+    };
+
+    // Add items twice for seamless infinite scrolling
+    data.ideas.forEach((idea: { prompt: string; image: string; timestamp: string }) => {
+      scrollWrapper.appendChild(createItem(idea));
+    });
+
+    // Duplicate items for seamless loop
+    data.ideas.forEach((idea: { prompt: string; image: string; timestamp: string }) => {
+      scrollWrapper.appendChild(createItem(idea));
+    });
+
+    // Add the wrapper to the gallery
+    inspirationGallery.appendChild(scrollWrapper);
+
+    // Start auto-scrolling animation with current speed
+    scrollWrapper.classList.add("auto-scroll");
+    scrollWrapper.style.animationDuration = `${currentSettings.inspirationSpeed}s`;
+
+    // Show the section (if enabled in settings)
+    if (currentSettings.showInspiration) {
+      inspirationSection.style.display = "block";
+    } else {
+      inspirationSection.style.display = "none";
+    }
+  } catch (error) {
+    console.error("Failed to load inspiration:", error);
+    inspirationSection.style.display = "none";
+  }
 }
 
 // Check for microphone access before showing the button
@@ -143,6 +259,11 @@ function wait(ms: number) {
 }
 
 async function resetRecorder() {
+  // Clean up old recorder if it exists
+  if (mediaRecorder && mediaRecorder.stream) {
+    mediaRecorder.stream.getTracks().forEach((track) => track.stop());
+  }
+
   audioChunks = [];
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
   mediaRecorder = new MediaRecorder(stream);
@@ -152,29 +273,61 @@ async function resetRecorder() {
   };
 
   mediaRecorder.onstop = async () => {
-    console.log(`Media recorder stopped`);
+    console.log(`Media recorder stopped, audio chunks:`, audioChunks.length);
     // Remove recording class
     recordBtn.classList.remove("recording");
     recordBtn.classList.add("loading");
     recordBtn.textContent = "Imagining...";
 
+    // Check if we have audio data
+    if (audioChunks.length === 0) {
+      console.error("No audio data captured");
+      recordBtn.classList.remove("loading");
+      recordBtn.textContent = "Sticker Dream";
+      showToast("No audio captured. Try holding the button longer.", 'error');
+      resetRecorder();
+      return;
+    }
+
     // Create audio blob and URL
     const audioBlob = new Blob(audioChunks, { type: "audio/webm" });
+    console.log(`Audio blob size: ${audioBlob.size} bytes`);
+
+    if (audioBlob.size === 0) {
+      console.error("Audio blob is empty");
+      recordBtn.classList.remove("loading");
+      recordBtn.textContent = "Sticker Dream";
+      showToast("No audio captured. Try holding the button longer.", 'error');
+      resetRecorder();
+      return;
+    }
+
     const audioUrl = URL.createObjectURL(audioBlob);
     audioElement.src = audioUrl;
 
     // Transcribe
-    statusMessage.textContent = "Transcribing...";
-    statusMessage.style.display = "block";
-    generateBtn.style.display = "none";
-    const output = await transcriber(audioUrl);
-    const text = Array.isArray(output) ? output[0].text : output.text;
-    transcriptDiv.value = text;
-    statusMessage.style.display = "none";
-    generateBtn.style.display = "block";
-
-    console.log(output);
-    recordBtn.textContent = "Dreaming Up...";
+    let text: string;
+    try {
+      statusMessage.textContent = "Transcribing...";
+      statusMessage.style.display = "block";
+      generateBtn.style.display = "none";
+      console.log("Starting transcription...");
+      const output = await transcriber(audioUrl);
+      console.log("Transcription complete:", output);
+      text = Array.isArray(output) ? output[0].text : output.text;
+      transcriptDiv.value = text;
+      statusMessage.style.display = "none";
+      generateBtn.style.display = "block";
+      recordBtn.textContent = "Dreaming Up...";
+    } catch (error) {
+      console.error("Transcription error:", error);
+      recordBtn.classList.remove("loading");
+      recordBtn.textContent = "Sticker Dream";
+      statusMessage.style.display = "none";
+      showToast("Transcription failed. Please try again.", 'error');
+      resetRecorder();
+      return;
+    }
 
     const abortWords = ["BLANK", "NO IMAGE", "NO STICKER", "CANCEL", "ABORT", "START OVER"];
     if(!text || abortWords.some(word => text.toUpperCase().includes(word))) {
@@ -192,7 +345,9 @@ async function resetRecorder() {
     }
 
     // Generate and print the image
+    console.log("Calling generateAndPrint with text:", text);
     await generateAndPrint(text);
+    console.log("generateAndPrint completed");
 
     // Stop loading state
     recordBtn.classList.remove("loading");
@@ -216,14 +371,20 @@ transcriptDiv.addEventListener("focus", () => {
 // Check microphone access on load
 checkMicrophoneAccess();
 resetRecorder();
+loadInspirationGallery();
 
 // Start recording when button is pressed down
 recordBtn.addEventListener("pointerdown", async () => {
+  // Don't start if already recording
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    return;
+  }
+
   // Reset audio chunks
   audioChunks = [];
   console.log(`Media recorder`, mediaRecorder);
-  // Start recording
-  mediaRecorder.start();
+  // Start recording with 100ms timeslice to ensure data is captured
+  mediaRecorder.start(100);
   console.log(`Media recorder started`);
   recordBtn.classList.add("recording");
   recordBtn.textContent = "Listening...";
@@ -247,7 +408,7 @@ recordBtn.addEventListener("pointerup", () => {
 
   if (mediaRecorder && mediaRecorder.state === "recording") {
     mediaRecorder.stop();
-    mediaRecorder.stream.getTracks().forEach((track) => track.stop());
+    // Don't stop tracks immediately - let the onstop handler deal with it
   }
 });
 
@@ -260,7 +421,7 @@ recordBtn.addEventListener("pointerleave", () => {
 
   if (mediaRecorder && mediaRecorder.state === "recording") {
     mediaRecorder.stop();
-    mediaRecorder.stream.getTracks().forEach((track) => track.stop());
+    // Don't stop tracks immediately - let the onstop handler deal with it
   }
 });
 
@@ -286,8 +447,8 @@ document.addEventListener("keydown", async (e) => {
     audioChunks = [];
     console.log(`Media recorder (keyboard)`, mediaRecorder);
 
-    // Start recording
-    mediaRecorder.start();
+    // Start recording with 100ms timeslice to ensure data is captured
+    mediaRecorder.start(100);
     console.log(`Media recorder started (keyboard)`);
     recordBtn.classList.add("recording");
     recordBtn.textContent = "Listening...";
@@ -296,7 +457,7 @@ document.addEventListener("keydown", async (e) => {
     recordingTimeout = window.setTimeout(() => {
       if (mediaRecorder && mediaRecorder.state === "recording") {
         mediaRecorder.stop();
-        mediaRecorder.stream.getTracks().forEach((track) => track.stop());
+        // Don't stop tracks immediately - let the onstop handler deal with it
         isRecordingViaKeyboard = false;
       }
     }, 15000);
@@ -317,7 +478,7 @@ document.addEventListener("keyup", (e) => {
     if (mediaRecorder) {
       if (mediaRecorder.state === "recording") {
         mediaRecorder.stop();
-        mediaRecorder.stream.getTracks().forEach((track) => track.stop());
+        // Don't stop tracks immediately - let the onstop handler deal with it
       } else {
         // If we released too quickly and recorder hasn't started, just reset the button
         recordBtn.classList.remove("recording");
@@ -379,24 +540,47 @@ safetyToleranceSlider.addEventListener("input", () => {
   safetyToleranceValue.textContent = safetyToleranceSlider.value;
 });
 
+inspirationSpeedSlider.addEventListener("input", () => {
+  speedValue.textContent = `${inspirationSpeedSlider.value}s`;
+});
+
 // Show/hide FLUX settings based on model selection
-modelSelect.addEventListener("change", () => {
-  const showFluxSettings = modelSelect.value === 'flux' || modelSelect.value === 'all';
-  fluxSettings.style.display = showFluxSettings ? 'block' : 'none';
+modelCheckboxes.forEach(checkbox => {
+  checkbox.addEventListener("change", () => {
+    const selectedModels = Array.from(modelCheckboxes)
+      .filter(cb => cb.checked)
+      .map(cb => cb.getAttribute('data-model') || '');
+
+    const hasFluxModel = selectedModels.includes('flux');
+    fluxSettings.style.display = hasFluxModel ? 'block' : 'none';
+  });
 });
 
 // Save settings
 saveBtn.addEventListener("click", () => {
+  // Get selected models from checkboxes
+  const selectedModels = Array.from(modelCheckboxes)
+    .filter(cb => cb.checked)
+    .map(cb => cb.getAttribute('data-model') || '');
+
+  if (selectedModels.length === 0) {
+    showToast("Please select at least one model", 'error', 3000);
+    return;
+  }
+
   const newSettings: AppSettings = {
-    model: modelSelect.value as 'gemini' | 'flux' | 'all',
+    models: selectedModels,
     enableSafetyChecker: enableSafetyCheckbox.checked,
     safetyTolerance: parseInt(safetyToleranceSlider.value),
     autoPrint: autoPrintCheckbox.checked,
     forKids: forKidsCheckbox.checked,
-    lineStyle: lineStyleSelect.value as 'default' | 'sharpie' | 'stencil' | 'coloring-book'
+    lineStyle: lineStyleSelect.value as 'default' | 'sharpie' | 'stencil' | 'coloring-book',
+    showInspiration: showInspirationCheckbox.checked,
+    inspirationSpeed: parseInt(inspirationSpeedSlider.value)
   };
 
   saveSettings(newSettings);
+  applyInspirationSettings(); // Apply inspiration settings immediately
   settingsModal.style.display = "none";
   showToast("Settings saved!", 'success', 3000);
 });
@@ -431,6 +615,9 @@ async function generateAndPrint(prompt: string) {
     return;
   }
 
+  // Hide inspiration gallery while generating
+  inspirationSection.style.display = "none";
+
   try {
     const printText = currentSettings.autoPrint ? "Generating & Printing..." : "Generating...";
     statusMessage.textContent = printText;
@@ -448,7 +635,7 @@ async function generateAndPrint(prompt: string) {
       },
       body: JSON.stringify({
         prompt,
-        model: currentSettings.model,
+        models: currentSettings.models,
         enableSafetyChecker: currentSettings.enableSafetyChecker,
         safetyTolerance: currentSettings.safetyTolerance,
         autoPrint: currentSettings.autoPrint,
@@ -469,10 +656,12 @@ async function generateAndPrint(prompt: string) {
     }
 
     const data = await response.json();
+    console.log("Received data from API:", data);
 
     // Clear previous images
     imagesContainer.innerHTML = '';
     imagesContainer.style.display = 'flex';
+    console.log("Images container display set to flex");
 
     // Display all images
     data.images.forEach((img: { data: string, model: string }) => {
@@ -524,11 +713,19 @@ async function generateAndPrint(prompt: string) {
 
       imagesContainer.appendChild(imageCard);
     });
+    console.log(`Appended ${data.images.length} image(s) to container`);
 
     statusMessage.style.display = "none";
     cancelBtn.style.display = "none";
     generateBtn.style.display = "block";
     console.log("✅ Image(s) generated!");
+
+    // Show inspiration gallery again after 5 seconds
+    setTimeout(() => {
+      if (currentSettings.showInspiration) {
+        inspirationSection.style.display = "block";
+      }
+    }, 5000);
   } catch (error) {
     console.error("Error:", error);
 
@@ -541,6 +738,11 @@ async function generateAndPrint(prompt: string) {
       }, 2000);
       cancelBtn.style.display = "none";
       generateBtn.style.display = "block";
+
+      // Show inspiration gallery back immediately on cancel
+      if (currentSettings.showInspiration) {
+        inspirationSection.style.display = "block";
+      }
       return;
     }
 
@@ -565,6 +767,11 @@ async function generateAndPrint(prompt: string) {
     setTimeout(() => {
       statusMessage.style.display = "none";
     }, 3000);
+
+    // Show inspiration gallery back immediately on error
+    if (currentSettings.showInspiration) {
+      inspirationSection.style.display = "block";
+    }
   } finally {
     currentAbortController = null;
   }
