@@ -4,7 +4,7 @@ import { cors } from "hono/cors";
 import { GoogleGenAI } from "@google/genai";
 import Replicate from "replicate";
 import OpenAI from "openai";
-import { printToUSB, watchAndResumePrinters } from "./print.ts";
+import { printToUSB } from "./print.ts";
 import { writeFile, mkdir, readFile, readdir } from "fs/promises";
 import { join } from "path";
 
@@ -17,8 +17,6 @@ await mkdir(SAVE_DIR, { recursive: true });
 
 // Enable CORS for Vite dev server
 app.use("/*", cors());
-
-watchAndResumePrinters();
 
 // Initialize Google AI
 const ai = new GoogleGenAI({

@@ -117,10 +117,12 @@ export async function isPrinterEnabled(printerName: string): Promise<boolean> {
   try {
     const { stdout } = await execAsync(`lpstat -p "${printerName}"`);
 
-    // Check for disabled/paused states
+    // Check for disabled/paused/stopped/offline states
     const isDisabled =
       stdout.toLowerCase().includes("disabled") ||
-      stdout.toLowerCase().includes("paused");
+      stdout.toLowerCase().includes("paused") ||
+      stdout.toLowerCase().includes("stopped") ||
+      stdout.toLowerCase().includes("offline");
 
     return !isDisabled;
   } catch (error) {
@@ -375,8 +377,23 @@ export async function printToUSB(
     throw new Error("No USB printers found");
   }
 
-  // Use the first USB printer or the default one if it's USB
-  const printer = usbPrinters.find((p) => p.isDefault) || usbPrinters[0];
+  // Filter to only printers that are currently online and accepting jobs
+  const enabledPrinters: Printer[] = [];
+  for (const printer of usbPrinters) {
+    if (await isPrinterEnabled(printer.name)) {
+      enabledPrinters.push(printer);
+    }
+  }
+
+  if (enabledPrinters.length === 0) {
+    throw new Error(
+      "No USB printers are currently online. Check that the printer is plugged in and powered on."
+    );
+  }
+
+  // Use the first enabled USB printer (prefer the default if it's enabled)
+  const printer =
+    enabledPrinters.find((p) => p.isDefault) || enabledPrinters[0];
 
   const jobId = await printImage(printer.name, imagePathOrBuffer, options);
 
