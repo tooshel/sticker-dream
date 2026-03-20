@@ -1,0 +1,12 @@
+services:
+  # The backend runs natively (pnpm run all) so it can access CUPS and the USB printer.
+  # Cloudflared tunnels traffic from your public URL to the native backend on port 3000.
+  # In your Cloudflare dashboard, set the tunnel service URL to: http://host.docker.internal:3000
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run
+    environment:
+      - TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped

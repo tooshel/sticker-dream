@@ -5,6 +5,7 @@ import { GoogleGenAI } from "@google/genai";
 import Replicate from "replicate";
 import OpenAI from "openai";
 import { printToUSB } from "./print.ts";
+import { serveStatic } from "@hono/node-server/serve-static";
 import { writeFile, mkdir, readFile, readdir } from "fs/promises";
 import { join } from "path";
 
@@ -555,6 +556,10 @@ app.post("/api/print", async (c) => {
     );
   }
 });
+
+// Serve built frontend static files (production / Docker)
+app.use("/*", serveStatic({ root: "./dist" }));
+app.get("*", serveStatic({ path: "/index.html", root: "./dist" }));
 
 serve(
   {

@@ -162,7 +162,7 @@ function applyInspirationSettings() {
 // Fetch and display inspiration ideas
 async function loadInspirationGallery() {
   try {
-    const response = await fetch("http://localhost:3000/api/inspiration?count=50");
+    const response = await fetch("/api/inspiration?count=50");
     const data = await response.json();
 
     if (!data.ideas || data.ideas.length === 0) {
