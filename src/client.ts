@@ -60,10 +60,10 @@ const DEFAULT_SETTINGS: AppSettings = {
   models: ['gemini'], // Default to just Gemini
   enableSafetyChecker: true,
   safetyTolerance: 2,
-  autoPrint: true,
+  autoPrint: false,
   forKids: true,
   lineStyle: 'default',
-  showInspiration: true,
+  showInspiration: false,
   inspirationSpeed: 60
 };
 
@@ -696,7 +696,7 @@ async function generateAndPrint(prompt: string) {
         printBtn.addEventListener('click', () => {
           printBtn.disabled = true;
           const originalHTML = printBtn.innerHTML;
-          printBtn.innerHTML = '<span style="font-size: 20px;">●</span>';
+          printBtn.innerHTML = '<div class="print-spinner"></div>';
           printImage(img.data, img.model).finally(() => {
             printBtn.disabled = false;
             printBtn.innerHTML = originalHTML;
